@@ -17,7 +17,7 @@ var mu sync.Mutex
 var validUser = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,32}$`)
 
 // ══════════════════════════════════════════════════════════════════
-// UUID generator (v4 format, seperti generateUUID() di server.cjs)
+// UUID generator (v4 format)
 // ══════════════════════════════════════════════════════════════════
 func generateUUID() string {
 	b := make([]byte, 16)
@@ -27,8 +27,8 @@ func generateUUID() string {
 			b[i] = byte(t >> (i * 8))
 		}
 	}
-	b[6] = (b[6] & 0x0f) | 0x40 // version 4
-	b[8] = (b[8] & 0x3f) | 0x80 // variant
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
@@ -45,19 +45,17 @@ func getOrCreateUUID() string {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// Public domain auto-detect (quick tunnel + named tunnel)
+// Public domain auto-detect
 // ══════════════════════════════════════════════════════════════════
 func getPublicDomain() string {
 	const cachePath = "/tmp/domain.txt"
 
-	// 1. Coba cache dulu
 	if data, err := os.ReadFile(cachePath); err == nil {
 		if s := strings.TrimSpace(string(data)); s != "" && s != "localhost" {
 			return s
 		}
 	}
 
-	// 2. Parse cloudflared logs
 	logPaths := []string{
 		"/tmp/tunnel.log",
 		"/tmp/named_tunnel.log",
@@ -83,7 +81,6 @@ func getPublicDomain() string {
 		}
 	}
 
-	// 3. Env fallback (opsional)
 	if d := os.Getenv("PUBLIC_DOMAIN"); d != "" {
 		return d
 	}
@@ -127,7 +124,7 @@ func apiAdd(w http.ResponseWriter, r *http.Request) {
 	pass := strings.TrimSpace(r.FormValue("pass"))
 
 	if !validUser.MatchString(user) {
-		json.NewEncoder(w).Encode(map[string]interface{}{"status": "error", "message": "Username tidak valid (alphanumeric, -,_)"})
+		json.NewEncoder(w).Encode(map[string]interface{}{"status": "error", "message": "Username tidak valid"})
 		return
 	}
 	if len(pass) < 4 {
@@ -170,7 +167,7 @@ func apiDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// Info JSON — UUID & Domain auto
+// Info JSON
 // ══════════════════════════════════════════════════════════════════
 func apiInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -196,7 +193,7 @@ func getEnv(k, def string) string {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// HTML Panel — Embedded
+// HTML Panel
 // ══════════════════════════════════════════════════════════════════
 func serveUI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -204,7 +201,6 @@ func serveUI(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// Generate UUID di awal (persist ke /tmp/uuid.txt)
 	u := getOrCreateUUID()
 	fmt.Printf("[admin] UUID aktif: %s\n", u)
 
@@ -219,6 +215,9 @@ func main() {
 	http.ListenAndServe("127.0.0.1:8081", mux)
 }
 
+// ─────────────────────────────────────────────────────────────────
+// HTML PANEL — embedded, tanpa backtick di dalam
+// ─────────────────────────────────────────────────────────────────
 const htmlPanel = `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -353,66 +352,69 @@ border-radius:6px;cursor:pointer;font-size:.78em;font-weight:bold;color:#6a6a8a;
 let INFO = {paths:{}};
 
 function tab(t, ev){
-  document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
-  document.querySelectorAll('.section').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(function(e){e.classList.remove('active')});
+  document.querySelectorAll('.section').forEach(function(e){e.classList.remove('active')});
   ev.target.classList.add('active');
   document.getElementById('sec-'+t).classList.add('active');
 }
 
 function msg(el, text, ok){
-  const d = document.getElementById(el);
+  var d = document.getElementById(el);
   d.innerHTML = '<div class="msg '+(ok?'ok':'err')+'">'+text+'</div>';
-  setTimeout(()=>d.innerHTML='', 4000);
+  setTimeout(function(){d.innerHTML=''}, 4000);
 }
 
 async function loadUsers(){
-  const r = await fetch('/api/list');
-  const d = await r.json();
-  const t = document.getElementById('tbody');
+  var r = await fetch('/api/list');
+  var d = await r.json();
+  var t = document.getElementById('tbody');
   if(!d.users || !d.users.length){
     t.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#6a6a8a">Belum ada akun</td></tr>';
     return;
   }
-  t.innerHTML = d.users.map(u=>`<tr>
-    <td><code>${u.username}</code></td>
-    <td style="font-size:.85em;color:#6a6a8a">${u.shell}</td>
-    <td style="text-align:right"><button class="btn-red btn-sm" onclick="delUser('${u.username}')">Hapus</button></td>
-  </tr>`).join('');
+  // ── FIX: concatenation, tanpa template literal ──
+  t.innerHTML = d.users.map(function(u){
+    return '<tr>' +
+      '<td><code>' + u.username + '</code></td>' +
+      '<td style="font-size:.85em;color:#6a6a8a">' + u.shell + '</td>' +
+      '<td style="text-align:right"><button class="btn-red btn-sm" onclick="delUser(\'' + u.username + '\')">Hapus</button></td>' +
+      '</tr>';
+  }).join('');
 }
 
 async function addUser(){
-  const user = document.getElementById('u').value.trim();
-  const pass = document.getElementById('p').value.trim();
+  var user = document.getElementById('u').value.trim();
+  var pass = document.getElementById('p').value.trim();
   if(!user || !pass){ msg('msg-add','Isi username & password',false); return; }
-  const r = await fetch('/api/add',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+  var r = await fetch('/api/add',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
     body:'user='+encodeURIComponent(user)+'&pass='+encodeURIComponent(pass)});
-  const d = await r.json();
+  var d = await r.json();
   msg('msg-add', d.message, d.status==='success');
   if(d.status==='success'){ document.getElementById('u').value=''; document.getElementById('p').value=''; loadUsers(); }
 }
 
 async function delUser(user){
   if(!confirm('Hapus akun '+user+'?')) return;
-  const r = await fetch('/api/delete',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+  var r = await fetch('/api/delete',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
     body:'user='+encodeURIComponent(user)});
-  const d = await r.json();
+  var d = await r.json();
   if(d.status==='success') loadUsers();
   else alert(d.message);
 }
 
 function b64(s){return btoa(encodeURIComponent(s).replace(/%([0-9A-F]{2})/g,
-  (m,p1)=>String.fromCharCode('0x'+p1)));}
+  function(m,p1){return String.fromCharCode('0x'+p1)}));}
 
 function genConfig(){
-  const proto = document.getElementById('proto').value;
-  const mode = document.getElementById('mode').value;
-  const bug = document.getElementById('bug').value.trim();
-  const host = INFO.domain;
-  const uuid = INFO.uuid;
-  const path = INFO.paths[proto] || '/'+proto+'-argo';
-  const cdnPath = '/'+bug+path;
-  const rem = 'PREMIUM-'+proto.toUpperCase()+'-'+mode.toUpperCase();
-  let r = '';
+  var proto = document.getElementById('proto').value;
+  var mode = document.getElementById('mode').value;
+  var bug = document.getElementById('bug').value.trim();
+  var host = INFO.domain;
+  var uuid = INFO.uuid;
+  var path = INFO.paths[proto] || '/'+proto+'-argo';
+  var cdnPath = '/'+bug+path;
+  var rem = 'PREMIUM-'+proto.toUpperCase()+'-'+mode.toUpperCase();
+  var r = '';
 
   if(mode==='sni'){
     if(proto==='vless') r = 'vless://'+uuid+'@'+bug+':443?encryption=none&security=tls&sni='+host+'&fp=randomized&type=ws&host='+host+'&path='+encodeURIComponent(path)+'#'+rem;
@@ -433,13 +435,13 @@ function genConfig(){
 function copyOut(){ navigator.clipboard.writeText(document.getElementById('out').textContent); }
 
 function copySSH(){
-  const dom = INFO.domain || 'localhost';
+  var dom = INFO.domain || 'localhost';
   navigator.clipboard.writeText('ssh -p 443 user@'+dom);
 }
 
-(async ()=>{
+(async function(){
   try {
-    const r = await fetch('/api/info');
+    var r = await fetch('/api/info');
     INFO = await r.json();
     document.getElementById('i-dom').value = INFO.domain;
     document.getElementById('i-uuid').value = INFO.uuid;
