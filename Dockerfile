@@ -59,7 +59,7 @@ COPY nginx.conf    /etc/nginx/nginx.conf
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# ── Bersihkan config default nginx + module auto-load ──
+# ── Bersihkan config default nginx ──
 RUN rm -f /etc/nginx/sites-enabled/default \
           /etc/nginx/conf.d/*.conf \
           /etc/nginx/modules-enabled/*.conf
@@ -69,15 +69,23 @@ RUN mkdir -p /run/sshd /var/run /var/log/nginx /etc/nginx/ssl \
              /var/lib/nginx/body /var/lib/nginx/proxy \
              /var/lib/nginx/fastcgi /var/lib/nginx/scgi /var/lib/nginx/uwsgi
 
+# ══════════════════════════════════════════════════════════════════
+# 🔑 GENERATE DUMMY CERT untuk validasi nginx -t saat build
+#    (akan di-OVERWRITE oleh entrypoint.sh saat runtime)
+# ══════════════════════════════════════════════════════════════════
+RUN openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 \
+        -subj "/C=ID/ST=Jakarta/L=Jakarta/O=SSHServer/CN=localhost" \
+        -keyout /etc/nginx/ssl/server.key \
+        -out    /etc/nginx/ssl/server.crt 2>/dev/null
+
 # ── Log nginx ke stdout/stderr ──
 RUN ln -sf /dev/stdout /var/log/nginx/access.log \
  && ln -sf /dev/stderr /var/log/nginx/error.log \
  && ln -sf /dev/stdout /var/log/nginx/stream_access.log \
  && ln -sf /dev/stderr /var/log/nginx/stream_error.log
 
-# ── Validasi fail-fast ──
-RUN nginx -t -c /etc/nginx/nginx.conf 2>&1 || \
-    (echo "❌ nginx.conf tidak valid!" && exit 1)
+# ── Validasi fail-fast (SEKARANG lolos) ──
+RUN nginx -t -c /etc/nginx/nginx.conf 2>&1 && echo "✅ nginx.conf valid"
 
 EXPOSE 8080 8443
 ENTRYPOINT ["/entrypoint.sh"]
