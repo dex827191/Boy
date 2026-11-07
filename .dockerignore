@@ -1,0 +1,10 @@
+.git
+.env
+*.log
+node_modules
+dist
+README.md
+mux.go
+server.cjs
+package.json
+package-lock.json
